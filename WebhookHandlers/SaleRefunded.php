@@ -56,6 +56,9 @@ class SaleRefunded implements WebhookHandler
 
             return true;
         } catch (OrderNotFoundException $e) {
+            if($this->invokeOld($webhook))
+                return true;
+
             $this->logger->error(
                 '[SaleRefunded-Webhook] Could not find associated order with the temporaryID ' . $parentPayment,
                 ['webhook' => $webhook->toArray()]
@@ -63,6 +66,25 @@ class SaleRefunded implements WebhookHandler
 
             return false;
         } catch (\Exception $ex) {
+            $this->logger->error(
+                '[SaleRefunded-Webhook] Could not update entity',
+                ['message' => $ex->getMessage(), 'stacktrace' => $ex->getTrace()]
+            );
+
+            return false;
+        }
+    }
+
+    public function invokeOld(Webhook $webhook)
+    {
+        $transactionId = $webhook->getResource()['sale_id'];
+        try {
+            // check if it is an old order
+            return $this->paymentStatusService->updatePaymentStatusOldOrders(
+                $transactionId,
+                PaymentStatus::PAYMENT_STATUS_REFUNDED
+            );
+        }catch (\Exception $ex) {
             $this->logger->error(
                 '[SaleRefunded-Webhook] Could not update entity',
                 ['message' => $ex->getMessage(), 'stacktrace' => $ex->getTrace()]

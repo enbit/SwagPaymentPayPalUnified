@@ -11,6 +11,7 @@ namespace SwagPaymentPayPalUnified\Components\Services;
 use Shopware\Components\Model\ModelManager;
 use Shopware\Models\Order\Order;
 use Shopware\Models\Order\Status;
+use Shopware\Models\Payment\Payment;
 use SwagPaymentPayPalUnified\Components\Exception\OrderNotFoundException;
 use SwagPaymentPayPalUnified\Components\PaymentStatus;
 
@@ -50,5 +51,38 @@ class PaymentStatusService
         }
 
         $this->modelManager->flush($orderModel);
+    }
+
+
+    /**
+     * @param string $transactionId
+     * @param int    $paymentStateId
+     */
+    public function updatePaymentStatusOldOrders($transactionId, $paymentStateId)
+    {
+        /** @var Payment $payment */
+        $payment = $this->modelManager->getRepository(Payment::class)->findOneBy(['name' => 'paypal']);
+        /** @var Order|null $orderModel */
+        $orderModel = $this->modelManager->getRepository(Order::class)->findOneBy([
+            'transactionId' => $transactionId,
+            'paymentId' => $payment->getId(),
+        ]);
+
+        if (!($orderModel instanceof Order)) {
+            return false;
+        }
+
+        /** @var Status|null $orderStatusModel */
+        $orderStatusModel = $this->modelManager->getRepository(Status::class)->find($paymentStateId);
+
+        $orderModel->setPaymentStatus($orderStatusModel);
+        if ($paymentStateId === PaymentStatus::PAYMENT_STATUS_PAID
+            || $paymentStateId === PaymentStatus::PAYMENT_STATUS_PARTIALLY_PAID
+        ) {
+            $orderModel->setClearedDate(new \DateTime());
+        }
+
+        $this->modelManager->flush($orderModel);
+        return true;
     }
 }
